@@ -138,10 +138,6 @@ class TwitterCog(commands.Cog):
             logging.error(f"An unexpected error occurred fetching tweets: {e}")
             return
         
-        finally:
-            if self.check_tweets.interval.seconds != CHECK_INTERVAL_SECONDS:
-                self.check_tweets.change_interval(seconds=CHECK_INTERVAL_SECONDS)
-
         if not new_tweets:
             logging.info("No new tweets found.")
             return
