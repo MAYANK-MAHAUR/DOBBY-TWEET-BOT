@@ -5,7 +5,7 @@ A Discord bot that monitors a specific Twitter account and posts new tweets to a
 ## ✨ Features
 
 * **Twitter Integration**: Monitors a specified Twitter account for new tweets.
-* **AI-Powered Summaries**: Utilizes the **Sentient API** and **Dobby** (a Llama 3.1-8B model) to create concise and engaging summaries.
+* **AI-Powered Summaries**: Utilizes the  **SENTIENT Dobby** (a Llama 3.1-8B model) to create concise and engaging summaries.
 * **Persistent State**: Remembers the last tweet it saw, so you don't miss anything even if the bot restarts.
 * **Rate Limit Handling**: Gracefully handles Twitter API rate limits by pausing and retrying.
 * **Rich Discord Embeds**: Posts tweets as beautiful Discord embeds, complete with a clickable summary and a native tweet preview.
@@ -55,8 +55,8 @@ python main.py
 
 The bot uses a **task loop** to periodically check for new tweets from the specified user. When a new tweet is found, the bot:
 
-1.  **Feeds the tweet's text to the Sentient API.**
-2.  The **Sentient API, powered by the Dobby (Llama 3.1-8B) model**, generates a creative, one-sentence summary.
+1.  **Feeds the tweet's text to the Dobby via API.**
+2.  **The Dobby (Llama 3.1-8B) model**, generates a creative, one-sentence summary.
 3.  **Constructs a rich Discord embed** with the AI-generated summary.
 4.  **Posts two messages to Discord**:
     * The first message is the custom embed.
