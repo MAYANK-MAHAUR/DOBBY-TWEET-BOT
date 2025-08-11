@@ -22,7 +22,7 @@ TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 TWITTER_USERNAME = os.getenv("TWITTER_USERNAME")
 API_KEY = os.getenv("API_KEY")
 DOBBY_MODEL = os.getenv("DOBBY_MODEL") 
-CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL", 300)) 
+CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL", 900)) 
 
 STATE_FILE = "tweet_tracker_state.json"
 FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
@@ -107,40 +107,67 @@ class TwitterCog(commands.Cog):
                 return data["choices"][0]["message"]["content"].strip()
             else:
                 return None
-
     @tasks.loop(seconds=CHECK_INTERVAL_SECONDS)
     async def check_tweets(self):
         channel = self.bot.get_channel(DISCORD_CHANNEL_ID)
         if not channel:
+            logging.warning("Discord channel not found. Skipping check.")
             return
-        tweets_resp = await self.bot.loop.run_in_executor(
-            None,
-            lambda: self.twitter_client.get_users_tweets(
-                id=self.twitter_user_id,
-                since_id=self.last_tweet_id,
-                max_results=5,
-                tweet_fields=["created_at", "text", "id"],
-                exclude=["retweets", "replies"]
+
+        try:
+            tweets_resp = await self.bot.loop.run_in_executor(
+                None,
+                lambda: self.twitter_client.get_users_tweets(
+                    id=self.twitter_user_id,
+                    since_id=self.last_tweet_id,
+                    max_results=5,
+                    tweet_fields=["created_at", "text", "id"],
+                    exclude=["retweets", "replies"]
+                )
             )
-        )
-        new_tweets = sorted(tweets_resp.data, key=lambda t: t.id) if tweets_resp.data else []
-        if not new_tweets:
+            new_tweets = sorted(tweets_resp.data, key=lambda t: t.id) if tweets_resp.data else []
+        except tweepy.errors.TooManyRequests:
+            logging.warning(
+                "Twitter API rate limit hit (429 Too Many Requests). "
+                "Pausing the task for 15 minutes before retrying."
+            )
+            self.check_tweets.change_interval(minutes=15)
             return
+        except Exception as e:
+            logging.error(f"An unexpected error occurred fetching tweets: {e}")
+            return
+        
+        finally:
+            if self.check_tweets.interval.seconds != CHECK_INTERVAL_SECONDS:
+                self.check_tweets.change_interval(seconds=CHECK_INTERVAL_SECONDS)
+
+        if not new_tweets:
+            logging.info("No new tweets found.")
+            return
+
+        logging.info(f"Found {len(new_tweets)} new tweet(s).")
         for tweet in new_tweets:
             summary = await self._summarize_tweet(tweet.text)
+            
+            
             embed = discord.Embed(
                 description=summary or tweet.text,
                 color=discord.Color.blue()
             )
+            
+            
             tweet_url = f"https://twitter.com/{TWITTER_USERNAME}/status/{tweet.id}"
+
             embed.set_author(
                 name=f"New Tweet from @{TWITTER_USERNAME}",
                 url=tweet_url,
                 icon_url="https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
             )
-            embed.set_footer(text="Powered by Sentient & Dobby")
+            embed.set_footer(text="Powered by Fireworks AI & Dobby")
+            
             await channel.send(embed=embed)
-            await channel.send(tweet_url)
+            await channel.send("@everyone", tweet_url)
+
             await self._save_last_tweet_id(tweet.id)
             await asyncio.sleep(1)
 
