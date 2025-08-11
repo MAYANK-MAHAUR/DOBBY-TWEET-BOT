@@ -49,9 +49,9 @@ class TwitterCog(commands.Cog):
     async def cog_load(self):
         max_retries = 4
         for attempt in range(max_retries):
-            self.twitter_user_id = await self._get_twitter_user_id()
+            self.twitter_user_id = await self.get_twitter_user_id()
             if self.twitter_user_id:
-                self.last_tweet_id = await self._load_last_tweet_id()
+                self.last_tweet_id = await self.load_last_tweet_id()
                 logging.info(f"📌 Watching @{TWITTER_USERNAME} for new tweets. Last seen ID: {self.last_tweet_id}")
                 self.check_tweets.start()
                 return 
@@ -67,7 +67,7 @@ class TwitterCog(commands.Cog):
         await self.bot.http_session.close() 
         self.check_tweets.cancel()
 
-    async def _get_twitter_user_id(self):
+    async def get_twitter_user_id(self):
         user_resp = await self.bot.loop.run_in_executor(
             None, lambda: self.twitter_client.get_user(username=TWITTER_USERNAME)
         )
@@ -75,7 +75,7 @@ class TwitterCog(commands.Cog):
             return user_resp.data.id
         return None
 
-    async def _load_last_tweet_id(self):
+    async def load_last_tweet_id(self):
         if not os.path.exists(STATE_FILE):
             return None
         async with aiofiles.open(STATE_FILE, "r") as f:
@@ -83,12 +83,12 @@ class TwitterCog(commands.Cog):
             data = json.loads(content)
             return data.get("last_tweet_id")
 
-    async def _save_last_tweet_id(self, tweet_id: int):
+    async def save_last_tweet_id(self, tweet_id: int):
         async with aiofiles.open(STATE_FILE, "w") as f:
             await f.write(json.dumps({"last_tweet_id": tweet_id}))
         self.last_tweet_id = tweet_id
 
-    async def _summarize_tweet(self, text: str):
+    async def summarize_tweet(self, text: str):
         headers = {
             "Authorization": f"Bearer {API_KEY}",
             "Content-Type": "application/json",
@@ -107,6 +107,7 @@ class TwitterCog(commands.Cog):
                 return data["choices"][0]["message"]["content"].strip()
             else:
                 return None
+            
     @tasks.loop(seconds=CHECK_INTERVAL_SECONDS)
     async def check_tweets(self):
         channel = self.bot.get_channel(DISCORD_CHANNEL_ID)
@@ -147,7 +148,7 @@ class TwitterCog(commands.Cog):
 
         logging.info(f"Found {len(new_tweets)} new tweet(s).")
         for tweet in new_tweets:
-            summary = await self._summarize_tweet(tweet.text)
+            summary = await self.summarize_tweet(tweet.text)
             
             
             embed = discord.Embed(
@@ -166,9 +167,9 @@ class TwitterCog(commands.Cog):
             embed.set_footer(text="Powered by Fireworks AI & Dobby")
             
             await channel.send(embed=embed)
-            await channel.send("@everyone", tweet_url)
+            await channel.send(f"@everyone {tweet_url}")
 
-            await self._save_last_tweet_id(tweet.id)
+            await self.save_last_tweet_id(tweet.id)
             await asyncio.sleep(1)
 
 if __name__ == "__main__":
